@@ -1,0 +1,52 @@
+{
+  "source_repo_id": "edmos7/opentrajectory_dataset",
+  "source_root": null,
+  "episode": 0,
+  "camera_key": "observation.images.side",
+  "task_id": 0,
+  "frame_count": 325,
+  "frame_shape": [
+    480,
+    640,
+    3
+  ],
+  "frame_stride": 1,
+  "track_mode": "existing",
+  "seed_frame_idx": 12,
+  "seed_meta": {
+    "conf": 0.8538216352462769,
+    "max_y": 241,
+    "area": 1691,
+    "class_name": "so101_gripper",
+    "frame_idx": 12,
+    "trajectory_match_distance_px": 12.757194519042969,
+    "trajectory_match_xy": [
+      523.3045043945312,
+      232.4331512451172
+    ],
+    "tip_xy": [
+      535.1470947265625,
+      237.1764678955078
+    ],
+    "seed_selection": "first_detection_near_global_trajectory"
+  },
+  "trajectory_source": "existing_dataset_feature",
+  "trajectory_shape": [
+    551,
+    3
+  ],
+  "action_meta": {
+    "source": "observation.global_trajectory"
+  },
+  "artifacts": [
+    "trajectory_only_01_demo.mp4",
+    "trajectory_only_02_segmentation.mp4",
+    "trajectory_only_03_gripper_tip_selection.png",
+    "trajectory_only_04_existing_global_trajectory_progress.mp4",
+    "trajectory_only_06_global_trajectory_blank.png",
+    "trajectory_only_07_global_trajectory_overlay.png",
+    "trajectory_only_generation_explainer.mp4",
+    "trajectory_only_generation_metadata.json",
+    "trajectory_only_generation_walkthrough.mp4"
+  ]
+}
