@@ -1,0 +1,32 @@
+dataset:
+  repo_id: YOUR_NAMESPACE/trajectory_sequence_dataset
+
+policy:
+  type: open_trajectory
+  conditioning_mode: sequence
+  denoiser_backbone: dit
+  # Illustrative camera-role mapping; replace these with keys from your dataset.
+  environment_image_keys:
+    - observation.images.side
+    - observation.images.wrist
+  n_obs_steps: 2
+  observation_frame_offsets: [-8, 0]
+  horizon: 32
+  n_action_steps: 16
+  trajectory_length: 224
+  device: cuda
+  use_amp: false
+  push_to_hub: false
+
+output_dir: outputs/open_trajectory/sequence_dit
+job_name: open_trajectory_sequence_dit
+batch_size: 8
+num_workers: 4
+steps: 100000
+log_freq: 200
+save_checkpoint: true
+save_freq: 20000
+env_eval_freq: 0
+
+wandb:
+  enable: false

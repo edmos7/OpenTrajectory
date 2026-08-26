@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lerobot_policy_open_trajectory"
+version = "0.1.0"
+description = "Trajectory-conditioned diffusion policies and LeRobot dataset tooling"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "Open Trajectory contributors" }]
+dependencies = [
+  "av>=14",
+  "diffusers>=0.35",
+  "lerobot>=0.6.2,<0.7",
+  "numpy>=1.26",
+  "opencv-python>=4.10",
+  "pillow>=10",
+  "torch>=2.7",
+  "torchvision>=0.22",
+]
+
+[project.optional-dependencies]
+data = [
+  "scipy>=1.14",
+  "tapnet[torch]>=0.1.0",
+  "ultralytics>=8.3",
+]
+depth = ["huggingface-hub>=0.34"]
+dev = [
+  "pytest>=8.3",
+  "pytest-cov>=6",
+  "ruff>=0.12",
+]
+
+[project.scripts]
+open-trajectory = "lerobot_policy_open_trajectory.cli:main"
+
+[project.urls]
+Repository = "https://github.com/edmos7/open_trajectory"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lerobot_policy_open_trajectory"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

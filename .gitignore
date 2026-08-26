@@ -2,20 +2,6 @@ __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 
-# Agent tooling is local-only. This project is intended to become public, so
-# assistant context must never enter tracked history.
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-.github/copilot-instructions.md
-.agents/
-.claude/
-.cursor/
-
-# Local agent worktrees and historical curation state.
-/worktrees/
-PROGRESS_REPORT.md
-
 # Local environments
 .venv/
 venv/
@@ -32,7 +18,7 @@ wandb/
 experiment_logs/
 
 # Generated datasets and intermediate caches
-data/
+/data/
 datasets/
 tmp/
 temp/

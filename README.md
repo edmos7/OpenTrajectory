@@ -1,24 +1,82 @@
 # Open Trajectory
 
-Open Trajectory is a robotics dataset-generation and policy-training codebase for trajectory-conditioned manipulation with LeRobot datasets. The current focus is generating reliable gripper-tip trajectories, rendering trajectory-conditioning images, adding optional depth features, and training/evaluating Diffusion Policy variants on SO-100 style manipulation data.
+Open Trajectory is a robotics dataset-generation and policy-training codebase for trajectory-conditioned manipulation with LeRobot datasets. It builds point-track, gripper-tip trajectory, rendered trajectory-image, and optional depth representations, then trains policies that condition on those representations.
 
-This README is a working draft. The repository is being curated from research scripts, so each section marks which pieces are current and which still need confirmation.
+## Representations at a Glance
+
+Point tracks are a compact, increasingly common robotics representation: instead of asking a policy to recover all motion directly from pixels, they expose how selected robot and scene points move now and over a short future horizon. Open Trajectory can generate point tracks independently or together with a task-level gripper-tip trajectory.
+
+| Representation | What it captures | Per-frame or per-episode form |
+|---|---|---|
+| Point tracks | Sparse robot/object motion from one or more camera views | Normalized `[query, current+future horizon, xy]` tracks per frame |
+| Gripper-tip trajectory | The task-level end-effector path and grasp/release interval | Normalized `[trajectory step, x, y, active]` sequence per episode |
+| RT-Trajectory image | The same task-level path rendered as an image-conditioning baseline | RGB image with time-varying red path and grasp/release markers |
+| Depth | Optional scene geometry aligned with an RGB stream | Depth image or video feature for each configured camera view |
+
+The point-track generator supports:
+
+- robot-seeded tracks that follow the manipulator across the episode;
+- fresh grid tracks that capture local scene and object motion at each timestep;
+- an optional additional camera view;
+- configurable forecast horizon and sampling stride;
+- combined generation of point tracks and the gripper-tip trajectory in one dataset pass.
+
+### Camera roles and dataset keys
+
+Open Trajectory does not require cameras to have names such as `side`, `wrist`, or `main`. Commands accept the actual feature keys stored in each LeRobot dataset.
+
+- **Main-view camera** means the primary external view of the robot and workspace. A dataset might call it `observation.images.side`, `observation.images.front`, or something else.
+- **Wrist-view camera** means an egocentric camera attached near the end effector. Its key is also dataset-specific.
+- **Additional camera** means any other view used for environment encoding or secondary point tracks.
+
+Examples below use placeholders such as `<main_view_camera_key>`. Replace them with keys from the target dataset's feature metadata. Names such as `observation.main_cam_point_tracks` are generated output-feature names; they do not require the input camera itself to be named `main` or `side`.
 
 ## Visual Overview
 
-Trajectory tracking and forecasting examples:
+Point-track example:
 
-![TAPNext tracking](assets/visuals/tapnextpp_tracking.gif)
+![Main-view point tracks](assets/visuals/point_tracks.gif)
 
-![Main camera tracks](assets/visuals/main_cam_tracks.gif)
+Gripper-tip trajectory example:
 
-![Main camera forecast](assets/visuals/main_cam_forecast.gif)
+![Gripper-tip tracking](assets/visuals/gripper_tip_tracking.gif)
 
-Example trajectory overlay:
+![Sequence trajectory overlay](assets/visuals/sequence_overlay_example.png)
 
-![Trajectory overlay example](assets/visuals/trajectory_overlay_example.png)
+![RT-Trajectory image example](assets/visuals/rt_image_example.png)
 
-Planned visual: hand-drawn trajectory sketching video.
+## Native LeRobot Plugin
+
+The v0.1 package provides one LeRobot policy type, `open_trajectory`, with two conditioning modes:
+
+- `sequence` consumes `observation.global_trajectory` as normalized XY plus the grasp/release active interval;
+- `rt_image` consumes `observation.images.rt_trajectory` as the rendered RT-Trajectory image baseline.
+
+Both modes share camera/state/depth fusion and support DiT or U-Net action denoisers. DiT is the default and the configured comparison path.
+
+Use Python 3.12 and LeRobot `>=0.6.2,<0.7`, then install the plugin from the repository root:
+
+```bash
+python -m pip install -e .
+```
+
+LeRobot discovers installed distributions whose names begin with `lerobot_policy_`; no LeRobot source edit is required. The package also installs the `open-trajectory` dataset/visual command.
+
+### Command-Line Interface
+
+These paths are package-native:
+
+- `lerobot-train` policy/config/processor discovery and checkpoint handling;
+- `open-trajectory dataset augment` for adding validated artifact-backed features;
+- `open-trajectory visuals render` for rendering an episode artifact.
+
+The following commands remain transitional source-checkout adapters in v0.1:
+
+- `open-trajectory dataset generate`;
+- `open-trajectory dataset trim`;
+- `open-trajectory dataset add-depth`.
+
+Run those three commands from the repository root. They dispatch to the retained scripts under `data_generation/` and fail explicitly when those scripts are unavailable, such as from a wheel installed without a source checkout. The retained scripts in the sections below remain the canonical generation, trimming, and depth implementations until they are migrated into package-native libraries.
 
 ## Data Generation
 
@@ -30,7 +88,7 @@ Current recommended script:
 python data_generation/generate_global_trajectory_dataset.py \
   --source-repo-id <source_dataset> \
   --output-repo-id <output_dataset> \
-  --camera-key observation.images.side \
+  --camera-key <main_view_camera_key> \
   --resume
 ```
 
@@ -73,7 +131,7 @@ Current recommended script:
 python data_generation/generate_trajectory_image_dataset.py \
   --source-repo-id <source_dataset> \
   --output-repo-id <output_dataset>-rt-trajectory-images \
-  --camera-key observation.images.side \
+  --camera-key <main_view_camera_key> \
   --resume
 ```
 
@@ -115,8 +173,6 @@ Output features follow:
 observation.depth.<camera_suffix>
 ```
 
-Status note: defaults and exact camera choices still need confirmation.
-
 ### Dataset Trimming
 
 There are two trimming scripts, with different goals:
@@ -151,12 +207,12 @@ Current recommended combined script:
 python data_generation/generate_tracks_and_trajectory_dataset.py \
   --source-repo-id <source_dataset> \
   --output-repo-id <output_dataset> \
-  --main-cam-key observation.images.side \
+  --main-cam-key <main_view_camera_key> \
   --features both \
   --resume
 ```
 
-This is the preferred entry point when a dataset should contain both:
+This is the preferred entry point when a dataset should contain both point-based motion features and the task-level gripper-tip trajectory:
 
 ```text
 observation.global_trajectory
@@ -164,7 +220,7 @@ observation.main_cam_point_tracks
 observation.sec_cam_point_tracks
 ```
 
-The point tracks come from the older TAPNext++ Track Transformer feature generator, while `observation.global_trajectory` comes from the newer gripper-tip tracking strategy. The body/gripper median trajectory computed internally by the track generator is intentionally ignored when `--features both` is used.
+The point tracks come from the TAPNext++ Track Transformer feature generator, while `observation.global_trajectory` comes from the gripper-tip tracking strategy. The body/gripper median trajectory computed internally by the track generator is intentionally ignored when `--features both` is used.
 
 Feature modes:
 
@@ -180,22 +236,44 @@ Lower-level track-only script:
 python data_generation/generate_track_dataset.py \
   --source-repo-id <source_dataset> \
   --output-repo-id <output_dataset>-tracks \
-  --main-cam-key observation.images.side \
+  --main-cam-key <main_view_camera_key> \
   --no-global-trajectory
 ```
 
-Track feature semantics:
+Track feature semantics—the words `main_cam` and `sec_cam` describe output roles, not required input-camera names:
 
-- `observation.main_cam_point_tracks`: first half robot-seed tracks, second half fresh per-timestep grid tracks;
-- `observation.sec_cam_point_tracks`: optional secondary-camera grid tracks;
+- `observation.main_cam_point_tracks`: robot-seeded tracks plus fresh per-timestep grid tracks from the selected main-view camera;
+- `observation.sec_cam_point_tracks`: optional grid tracks from the selected additional camera;
 - all track coordinates are normalized to `[0, 1]`;
 - each row contains current point position plus `H` future positions.
 
-Current caveat: the combined script adds new features to datasets that do not already contain those output feature names. Use `generate_global_trajectory_dataset.py` when the goal is specifically to replace an existing `observation.global_trajectory`.
+The combined script adds new features to datasets that do not already contain those output feature names. Use `generate_global_trajectory_dataset.py` when the goal is specifically to replace an existing `observation.global_trajectory`.
 
 ## Model Training
 
-### Sequence-Conditioned Diffusion Policy
+### Native `lerobot-train` examples
+
+The example configs disable Hub uploads and Weights & Biases by default. Override the placeholder dataset ID and choose a new output directory for each run:
+
+```bash
+lerobot-train \
+  --config_path=configs/train_sequence_dit.yaml \
+  --dataset.repo_id=YOUR_NAMESPACE/trajectory_sequence_dataset \
+  --output_dir=outputs/open_trajectory/sequence_dit_run
+```
+
+```bash
+lerobot-train \
+  --config_path=configs/train_rt_image_dit.yaml \
+  --dataset.repo_id=YOUR_NAMESPACE/rt_image_dataset \
+  --output_dir=outputs/open_trajectory/rt_image_dit_run
+```
+
+The sequence dataset must contain `observation.global_trajectory` with shape `[T, 3]`. The RT-image dataset must contain `observation.images.rt_trajectory`. The example YAML files map the main-view and wrist-view roles to `observation.images.side` and `observation.images.wrist` only as illustrations. Replace `policy.environment_image_keys` with the RGB keys present in the target dataset. LeRobot infers input/output feature shapes and dataset statistics before constructing the policy.
+
+These are full 100,000-step training templates, not smoke tests. For a local configuration check, override `--steps=1`, `--batch_size=1`, `--num_workers=0`, `--save_checkpoint=false`, and use an explicit disposable output directory. A one-step pass checks integration only; it does not establish training quality or deployability.
+
+### Retained sequence-conditioned research trainer
 
 Main script:
 
@@ -229,7 +307,7 @@ Useful depth option:
 
 Depth features are auto-detected from the configured visual camera keys using `observation.depth.<camera_suffix>`.
 
-### RT-Trajectory Image Diffusion Policy
+### Retained RT-Trajectory image research trainer
 
 Main baseline script:
 
@@ -254,26 +332,22 @@ or pass a specific depth feature:
 --use-depth --depth-key observation.depth.side
 ```
 
-Specialist/no-trajectory policy scripts are intentionally not included in this curated repo for now.
+Specialist/no-trajectory policy scripts are not included.
 
 ## Inference
 
-Status: not yet included for the current public training paths.
+Native checkpoint serialization is covered, but robot rollout commands have not been validated.
 
-There are currently no curated inference scripts for:
+The native plugin saves its configuration and model state through LeRobot's standard checkpoint path. Loading still requires the `lerobot_policy_open_trajectory` distribution so LeRobot can discover the policy class and reconstruct the configured encoders and denoiser.
+
+There are currently no deployment commands for:
 
 - DiT sequence-conditioned checkpoints;
 - RT-Trajectory image-conditioned checkpoints.
 
-This is important because these checkpoints are not plain self-contained LeRobot policies. The inference loader must reconstruct the same external encoders and, for DiT checkpoints, the same local denoiser backbone before loading weights.
+The retained research-script checkpoints are not interchangeable with native plugin checkpoints. Their loaders must reconstruct the matching external encoders and, for DiT checkpoints, the matching local denoiser before loading weights.
 
 ## Setup
-
-Expected environment:
-
-```bash
-conda activate lerobotclone
-```
 
 Core dependencies:
 
@@ -286,7 +360,3 @@ Core dependencies:
 - optional Depth Anything V2 for depth-feature generation.
 
 Model files are intentionally not tracked by git. Place local weights in `models/` or pass explicit paths to the scripts.
-
-## Repository Status
-
-This repository is being curated as a standalone public research codebase. Interfaces and defaults marked as provisional still require confirmation before a release.
