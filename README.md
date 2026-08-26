@@ -41,7 +41,11 @@ Gripper-tip trajectory example:
 
 ![Gripper-tip tracking](assets/visuals/gripper_tip_tracking.gif)
 
+Sequence-based representation visualization
+
 ![Sequence trajectory overlay](assets/visuals/sequence_overlay_example.png)
+
+RT-Trajectory image replication (calibration free)
 
 ![RT-Trajectory image example](assets/visuals/rt_image_example.png)
 
@@ -360,3 +364,28 @@ Core dependencies:
 - optional Depth Anything V2 for depth-feature generation.
 
 Model files are intentionally not tracked by git. Place local weights in `models/` or pass explicit paths to the scripts.
+
+
+## References
+
+@misc{gu2023rttrajectoryrobotictaskgeneralization,
+      title={RT-Trajectory: Robotic Task Generalization via Hindsight Trajectory Sketches}, 
+      author={Jiayuan Gu and Sean Kirmani and Paul Wohlhart and Yao Lu and Montserrat Gonzalez Arenas and Kanishka Rao and Wenhao Yu and Chuyuan Fu and Keerthana Gopalakrishnan and Zhuo Xu and Priya Sundaresan and Peng Xu and Hao Su and Karol Hausman and Chelsea Finn and Quan Vuong and Ted Xiao},
+      year={2023},
+      eprint={2311.01977},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2311.01977}, 
+}
+
+@misc{jung2026tapnextwhatstrackingpoint,
+      title={TAPNext++: What's Next for Tracking Any Point (TAP)?}, 
+      author={Sebastian Jung and Artem Zholus and Martin Sundermeyer and Carl Doersch and Ross Goroshin and David Joseph Tan and Sarath Chandar and Rudolph Triebel and Federico Tombari},
+      year={2026},
+      eprint={2604.10582},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2604.10582}, 
+}
+
+https://huggingface.co/riversnow/so101-segmentation-model
