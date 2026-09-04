@@ -49,7 +49,7 @@ RT-Trajectory image replication (calibration free)
 
 ![RT-Trajectory image example](assets/visuals/rt_image_example.png)
 
-Side-camera depth feature:
+ Additional depth feature (DepthAnything V2-small):
 
 ![Side-camera depth feature](assets/visuals/side_depth_episode_044.gif)
 
