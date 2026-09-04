@@ -49,6 +49,10 @@ RT-Trajectory image replication (calibration free)
 
 ![RT-Trajectory image example](assets/visuals/rt_image_example.png)
 
+Side-camera depth feature:
+
+![Side-camera depth feature](assets/visuals/side_depth_episode_044.gif)
+
 ## Native LeRobot Plugin
 
 The v0.1 package provides one LeRobot policy type, `open_trajectory`, with two conditioning modes:
@@ -169,7 +173,7 @@ python data_generation/add_depth_features.py \
   --depth-anything-dir /path/to/Depth-Anything-V2
 ```
 
-This adds Depth Anything V2 Small depth-video features for one or more RGB camera streams.
+This adds Depth Anything V2 Small depth-video features for one or more RGB camera streams. The visual overview shows an example `observation.depth.side` episode.
 
 Output features follow:
 
