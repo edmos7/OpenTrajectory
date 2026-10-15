@@ -72,6 +72,23 @@ def test_forward_loss_is_finite(mode: str) -> None:
     assert metrics["diffusion_loss"] == pytest.approx(float(loss.detach()))
 
 
+def test_diffusion_accepts_predicted_track_features():
+    config = _config()
+    key = "observation.point_tracks.side"
+    config.track_feature_keys = (key,)
+    config.input_features[key] = PolicyFeature(type=FeatureType.STATE, shape=(3, 4, 2))
+    policy = OpenTrajectoryPolicy(config)
+    batch = _training_batch("sequence")
+    batch[key] = torch.rand(1, 2, 3, 4, 2)
+    loss, _ = policy(batch)
+    loss.backward()
+    assert torch.isfinite(loss)
+    assert next(policy.model.track_encoders.parameters()).grad is not None
+    policy.eval()
+    observations = {k: v[:, -1] for k, v in batch.items() if k != "action"}
+    assert policy.predict_action_chunk(observations).shape == (1, 4, 3)
+
+
 def test_processor_normalizes_only_joint_state_observations() -> None:
     config = _config()
     preprocessor, postprocessor = make_open_trajectory_pre_post_processors(config)

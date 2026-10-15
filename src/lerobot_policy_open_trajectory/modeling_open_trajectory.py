@@ -74,6 +74,15 @@ class OpenTrajectoryModel(nn.Module):
             )
             condition_dim = config.rt_image_encoder_out_dim
 
+        self.track_encoders = nn.ModuleList(
+            nn.Sequential(
+                nn.Linear(config.input_features[key].shape[1] * 2, config.track_encoder_out_dim),
+                nn.GELU(),
+                nn.Linear(config.track_encoder_out_dim, config.track_encoder_out_dim),
+            )
+            for key in config.track_feature_keys
+        )
+        condition_dim += len(config.track_feature_keys) * config.track_encoder_out_dim
         self.depth_encoders = nn.ModuleList(
             DepthEncoder(config.depth_encoder_out_dim, config.environment_image_resize)
             for _ in config.depth_feature_keys
@@ -130,6 +139,7 @@ class OpenTrajectoryModel(nn.Module):
         temporal_inputs = {
             **{key: 5 for key in self.environment_image_keys},
             **{key: 5 for key in self.config.depth_feature_keys},
+            **{key: 5 for key in self.config.track_feature_keys},
             self.config.conditioning_feature_key: 4 if self.config.conditioning_mode == "sequence" else 5,
             **({OBS_STATE: 3} if self.config.use_joint_state else {}),
         }
@@ -159,6 +169,18 @@ class OpenTrajectoryModel(nn.Module):
         depth = _drop_modality(depth, self.config.depth_dropout_prob, self.training)
 
         condition = self.condition_encoder(batch[self.config.conditioning_feature_key])
+        track_features = []
+        for key, encoder in zip(self.config.track_feature_keys, self.track_encoders, strict=True):
+            tracks = batch[key]
+            if (
+                tuple(tracks.shape[2:]) != tuple(self.config.input_features[key].shape)
+                or not torch.isfinite(tracks).all()
+            ):
+                raise ValueError(f"{key}: tracks must be finite and match the configured [N, horizon, XY]")
+            # Encode each path, then pool points without depending on query order.
+            track_features.append(encoder(tracks.flatten(-2)).mean(dim=2))
+        if track_features:
+            condition = torch.cat([condition, *track_features], dim=-1)
         return self.fusion(state=state, vision=vision, depth=depth, trajectory=condition)
 
     def compute_loss(self, batch: dict[str, Tensor], reduction: str = "mean") -> Tensor:
@@ -247,6 +269,7 @@ class OpenTrajectoryPolicy(PreTrainedPolicy):
             for key in (
                 *self.config.resolved_environment_image_keys(),
                 *self.config.depth_feature_keys,
+                *self.config.track_feature_keys,
                 self.config.conditioning_feature_key,
                 *((OBS_STATE,) if self.config.use_joint_state else ()),
             )
@@ -338,7 +361,13 @@ class OpenTrajectoryPolicy(PreTrainedPolicy):
         prepared: dict[str, Tensor] = {}
         for key in self._observation_queues:
             value = batch[key]
-            single_ndim = 4 if key in image_keys else 3 if key == self.config.trajectory_feature_key else 2
+            single_ndim = (
+                4
+                if key in image_keys or key in self.config.track_feature_keys
+                else 3
+                if key == self.config.trajectory_feature_key
+                else 2
+            )
             if value.ndim == single_ndim:
                 value = value.unsqueeze(1).expand(-1, self.config.n_obs_steps, *value.shape[1:])
             elif value.ndim != single_ndim + 1 or value.shape[1] != self.config.n_obs_steps:

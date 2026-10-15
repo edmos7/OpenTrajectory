@@ -177,9 +177,10 @@ def render_episode_visuals(
         if first_frame is None:
             first_frame = frame
         denominator = max(total_video_frames - 1, frame_index, 1)
-        path_index = round(frame_index / denominator * (len(artifact.condition.path_xy) - 1))
+        if artifact.condition is not None:
+            path_index = round(frame_index / denominator * (len(artifact.condition.path_xy) - 1))
+            gripper_frames.append(render_gripper_tip_frame(frame, artifact.condition.path_xy, path_index))
         track_index = min(frame_index // artifact.frame_stride, tracks.shape[0] - 1)
-        gripper_frames.append(render_gripper_tip_frame(frame, artifact.condition.path_xy, path_index))
         point_track_frames.append(
             render_point_tracks_frame(
                 frame,
@@ -192,10 +193,14 @@ def render_episode_visuals(
         raise ValueError(f"No frames could be decoded from {video_path}")
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
-    rendered = {
-        "rt_image.png": artifact.condition.to_rt_image(),
-        "sequence_overlay.png": artifact.condition.overlay(first_frame, "sequence"),
-    }
+    rendered = (
+        {}
+        if artifact.condition is None
+        else {
+            "rt_image.png": artifact.condition.to_rt_image(),
+            "sequence_overlay.png": artifact.condition.overlay(first_frame, "sequence"),
+        }
+    )
     paths: list[Path] = []
     for name, image in rendered.items():
         path = output / name
@@ -205,9 +210,11 @@ def render_episode_visuals(
     duration_ms = round(1000 * frame_step / max(fps, 1e-6))
     gripper_path = output / "gripper_tip_tracking.gif"
     point_tracks_path = output / "point_tracks.gif"
-    _save_gif(gripper_frames, gripper_path, duration_ms)
+    if gripper_frames:
+        _save_gif(gripper_frames, gripper_path, duration_ms)
+        paths.append(gripper_path)
     _save_gif(point_track_frames, point_tracks_path, duration_ms)
-    paths.extend((gripper_path, point_tracks_path))
+    paths.append(point_tracks_path)
     return paths
 
 
@@ -218,6 +225,7 @@ def render_artifact_visuals(
 ) -> list[Path]:
     """Render sequence and RT-image panels through the production encoders."""
     artifact = EpisodeArtifact.load(artifact_path)
+    artifact.require_condition()
     frame = np.asarray(Image.open(frame_path).convert("RGB"))
     if frame.shape[:2] != artifact.image_size:
         frame = np.asarray(Image.fromarray(frame).resize(artifact.image_size[::-1]))

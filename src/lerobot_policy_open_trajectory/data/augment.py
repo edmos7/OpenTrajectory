@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from .artifacts import EpisodeArtifactStore
+from .schema import write_dataset_metadata
 
 GLOBAL_TRAJECTORY = "observation.global_trajectory"
 RT_TRAJECTORY_IMAGE = "observation.images.rt_trajectory"
@@ -38,11 +39,14 @@ def build_feature_callbacks(
 
     if "tracks" in features and not camera_keys:
         raise ValueError("camera_keys is required when features includes 'tracks'")
+    if "sequence" in features or "rt-image" in features:
+        for episode in store.episode_indices:
+            store.get(episode).require_condition()
 
     if "sequence" in features:
 
         def sequence(_row: dict, episode_index: int, _frame_index: int) -> np.ndarray:
-            return store.get(episode_index).condition.to_sequence(trajectory_length)
+            return store.get(episode_index).require_condition().to_sequence(trajectory_length)
 
         additions[GLOBAL_TRAJECTORY] = (
             sequence,
@@ -59,7 +63,7 @@ def build_feature_callbacks(
                     f"Episode {episode_index} image_size {artifact.image_size} does not match "
                     f"declared RT-image shape {(height, width)}"
                 )
-            return artifact.condition.to_rt_image()
+            return artifact.require_condition().to_rt_image()
 
         additions[RT_TRAJECTORY_IMAGE] = (
             rt_image,
@@ -71,6 +75,9 @@ def build_feature_callbacks(
         )
 
     if "tracks" in features:
+        slugs = [_slug(key) for key in camera_keys]
+        if not all(slugs) or len(set(slugs)) != len(slugs):
+            raise ValueError("Camera keys map to colliding feature names")
         for camera_key in camera_keys:
             camera = _slug(camera_key)
             shape = list(store.point_track_shape(camera))
@@ -87,6 +94,20 @@ def build_feature_callbacks(
                 tracks,
                 {"dtype": "float32", "shape": shape, "names": ["query", "horizon", "xy"]},
             )
+            masks_present = [camera in store.get(ep).validity for ep in store.episode_indices]
+            if any(masks_present):
+                if not all(masks_present):
+                    raise ValueError(f"Validity for {camera!r} must be supplied for every episode")
+
+                def validity(_row, episode_index, frame_index, *, name=camera):
+                    artifact = store.get(episode_index)
+                    masks = artifact.validity[name]
+                    return masks[min(int(frame_index) // artifact.frame_stride, len(masks) - 1)]
+
+                additions[f"observation.point_tracks_validity.{camera}"] = (
+                    validity,
+                    {"dtype": "bool", "shape": shape[:-1], "names": ["query", "horizon"]},
+                )
 
     return additions
 
@@ -126,10 +147,41 @@ def augment_dataset(
     if collisions:
         raise ValueError(f"Output features already exist: {collisions}")
     remove = ["task_id"] if drop_legacy_task_id and "task_id" in dataset.meta.features else None
-    return modify_features(
+    output = modify_features(
         dataset,
         add_features=additions,
         remove_features=remove,
         output_dir=output_dir,
         repo_id=output_repo_id,
     )
+    from ..generation.writer import inherit_metadata
+
+    inherit_metadata(dataset, output)
+    metadata = {}
+    for key in additions:
+        camera = (
+            key.rsplit(".", 1)[-1]
+            if key.startswith(("observation.point_tracks.", "observation.point_tracks_validity."))
+            else "trajectory"
+        )
+        per_episode = {}
+        for episode in _episode_indices(dataset):
+            descriptor = store.get(episode).spatial_metadata.get(camera)
+            per_episode[str(episode)] = descriptor.to_dict() if descriptor else None
+        metadata[key] = {
+            "granularity": "frame" if camera != "trajectory" else "episode",
+            "episodes": per_episode,
+            "provenance_status": "complete" if all(per_episode.values()) else "unknown_legacy",
+        }
+        descriptors = list(per_episode.values())
+        if descriptors and descriptors[0] is not None and all(d == descriptors[0] for d in descriptors):
+            metadata[key]["spatial"] = descriptors[0]
+        metadata[key]["horizon_includes_current"] = camera != "trajectory"
+        if camera != "trajectory":
+            strides = {
+                store.get(ep).anchor_strides.get(camera, store.get(ep).frame_stride)
+                for ep in _episode_indices(dataset)
+            }
+            metadata[key]["anchor_stride"] = next(iter(strides)) if len(strides) == 1 else None
+    write_dataset_metadata(output.root, metadata, source={"repo_id": repo_id, "revision": revision})
+    return output

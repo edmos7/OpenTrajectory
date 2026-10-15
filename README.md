@@ -55,18 +55,21 @@ RT-Trajectory image replication (calibration free)
 
 ## Native LeRobot Plugin
 
-The v0.1 package provides one LeRobot policy type, `open_trajectory`, with two conditioning modes:
+The package provides diffusion (`open_trajectory`) and ACT (`open_trajectory_act`) policies with two conditioning modes:
 
 - `sequence` consumes `observation.global_trajectory` as normalized XY plus the grasp/release active interval;
 - `rt_image` consumes `observation.images.rt_trajectory` as the rendered RT-Trajectory image baseline.
 
-Both modes share camera/state/depth fusion and support DiT or U-Net action denoisers. DiT is the default and the configured comparison path.
+The diffusion policy supports DiT or U-Net denoisers and optional camera-keyed track features. ACT uses a dedicated image or sequence task encoder. Learned future-track prediction is available separately from hindsight video tracking.
 
-Use Python 3.12 and LeRobot `>=0.6.2,<0.7`, then install the plugin from the repository root:
+Use Python 3.12 and LeRobot `>=0.6.1,<0.7` (including its dataset dependencies), then install the plugin from the repository root:
 
 ```bash
 python -m pip install -e .
 ```
+
+For native `lerobot-train`, install the training dependencies with
+`python -m pip install -e '.[training]'`.
 
 LeRobot discovers installed distributions whose names begin with `lerobot_policy_`; no LeRobot source edit is required. The package also installs the `open-trajectory` dataset/visual command.
 
@@ -78,13 +81,13 @@ These paths are package-native:
 - `open-trajectory dataset augment` for adding validated artifact-backed features;
 - `open-trajectory visuals render` for rendering an episode artifact.
 
-The following commands remain transitional source-checkout adapters in v0.1:
+Generation and preprocessing commands are also included in the installed package:
 
 - `open-trajectory dataset generate`;
 - `open-trajectory dataset trim`;
 - `open-trajectory dataset add-depth`.
 
-Run those three commands from the repository root. They dispatch to the retained scripts under `data_generation/` and fail explicitly when those scripts are unavailable, such as from a wheel installed without a source checkout. The retained scripts in the sections below remain the canonical generation, trimming, and depth implementations until they are migrated into package-native libraries.
+These commands load packaged backends, independently of the working directory. Tracking requires the `data` extra, the [upstream TAPNext source install](docs/library-integration.md#tracking-dependency), and explicit segmentation/tracker checkpoints; depth requires an explicit Depth Anything V2 code directory. Outputs stay local unless `--push` is supplied. The scripts below remain research references; see [library integration](docs/library-integration.md) for the installed interfaces, spatial metadata, ACT, and predictors.
 
 ## Data Generation
 

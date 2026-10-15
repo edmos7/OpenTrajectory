@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lerobot_policy_open_trajectory"
-version = "0.1.0"
+version = "0.2.0"
 description = "Trajectory-conditioned diffusion policies and LeRobot dataset tooling"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,7 +13,7 @@ authors = [{ name = "Open Trajectory contributors" }]
 dependencies = [
   "av>=14",
   "diffusers>=0.35",
-  "lerobot>=0.6.2,<0.7",
+  "lerobot[dataset]>=0.6.1,<0.7",
   "numpy>=1.26",
   "opencv-python>=4.10",
   "pillow>=10",
@@ -22,12 +22,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+training = ["lerobot[training]>=0.6.1,<0.7"]
 data = [
   "scipy>=1.14",
-  "tapnet[torch]>=0.1.0",
   "ultralytics>=8.3",
 ]
 depth = ["huggingface-hub>=0.34"]
+predictors = ["timm>=1.0", "safetensors>=0.4"]
 dev = [
   "pytest>=8.3",
   "pytest-cov>=6",
@@ -38,7 +39,23 @@ dev = [
 open-trajectory = "lerobot_policy_open_trajectory.cli:main"
 
 [project.urls]
-Repository = "https://github.com/edmos7/open_trajectory"
+Repository = "https://github.com/edmos7/OpenTrajectory"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/configs",
+  "/docs",
+  "/data_generation",
+  "/training",
+  "/utils",
+  "/scripts",
+  "/README.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+  "/pyproject.toml",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lerobot_policy_open_trajectory"]

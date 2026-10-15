@@ -28,6 +28,8 @@ class OpenTrajectoryConfig(PreTrainedConfig):
     trajectory_camera_key: str | None = None
     environment_image_keys: tuple[str, ...] = ()
     depth_feature_keys: tuple[str, ...] = ()
+    track_feature_keys: tuple[str, ...] = ()
+    track_encoder_out_dim: int = 32
     use_joint_state: bool = False
 
     trajectory_length: int = 224
@@ -179,6 +181,16 @@ class OpenTrajectoryConfig(PreTrainedConfig):
         missing_depth = [key for key in self.depth_feature_keys if key not in self.input_features]
         if missing_depth:
             raise ValueError(f"Missing configured depth features: {missing_depth}")
+        if len(set(self.track_feature_keys)) != len(self.track_feature_keys):
+            raise ValueError("track_feature_keys must be distinct")
+        if self.track_encoder_out_dim < 1:
+            raise ValueError("track_encoder_out_dim must be positive")
+        for key in self.track_feature_keys:
+            if key not in self.input_features:
+                raise ValueError(f"Missing configured track feature: {key}")
+            shape = self.input_features[key].shape
+            if len(shape) != 3 or min(shape[:2]) < 1 or shape[-1] != 2:
+                raise ValueError(f"{key}: tracks must be [N, horizon, XY]")
 
     def get_optimizer_preset(self) -> AdamWConfig:
         return AdamWConfig(

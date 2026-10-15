@@ -18,7 +18,7 @@ def test_distribution_name_is_importable_lerobot_policy_plugin() -> None:
 def test_lerobot_dependency_matches_required_processor_api() -> None:
     project = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())["project"]
 
-    assert "lerobot>=0.6.2,<0.7" in project["dependencies"]
+    assert "lerobot[dataset]>=0.6.1,<0.7" in project["dependencies"]
 
 
 def test_console_entry_point_resolves_to_callable() -> None:

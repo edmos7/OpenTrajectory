@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-import subprocess
-import sys
-from pathlib import Path
+from importlib import import_module
 
 from .data import augment_dataset
 from .visuals import render_artifact_visuals, render_episode_visuals
@@ -18,29 +16,23 @@ def _csv(value: str) -> tuple[str, ...]:
     return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
-def _legacy_script(name: str, arguments: list[str]) -> int:
-    """Run a transitional preprocessing backend behind the unified CLI."""
-    candidates = [Path.cwd(), *Path(__file__).resolve().parents]
-    script = next(
-        (
-            root / "data_generation" / name
-            for root in candidates
-            if (root / "data_generation" / name).is_file()
-        ),
-        None,
-    )
-    if script is None:
-        raise RuntimeError(
-            f"{name} is only available from an Open Trajectory source checkout; "
-            "run this command at the repository root"
-        )
-    return subprocess.call([sys.executable, str(script), *arguments])
+def _generation_command(name: str, arguments: list[str]) -> int:
+    """Load an installed backend without relying on the working directory."""
+    if arguments[:1] == ["--"]:
+        arguments = arguments[1:]
+    module = import_module(f".generation.{name.removesuffix('.py')}", __package__)
+    module.main(arguments)
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="open-trajectory")
     parser.add_argument("--verbose", action="store_true")
     commands = parser.add_subparsers(dest="command", required=True)
+    predictor = commands.add_parser("predictor", help="Learned future-track models")
+    predictor_commands = predictor.add_subparsers(dest="predictor_command", required=True)
+    train_predictor = predictor_commands.add_parser("train", help="Train with episode-disjoint validation")
+    train_predictor.add_argument("arguments", nargs=argparse.REMAINDER)
 
     dataset = commands.add_parser("dataset", help="Generate or modify LeRobot datasets")
     dataset_commands = dataset.add_subparsers(dest="dataset_command", required=True)
@@ -59,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     generate = dataset_commands.add_parser(
         "generate",
-        help="Generate trajectory conditioning with a source-checkout backend",
+        help="Generate trajectory conditioning and point tracks",
     )
     generate.add_argument(
         "--kind",
@@ -69,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("arguments", nargs=argparse.REMAINDER)
 
     trim = dataset_commands.add_parser("trim", help="Trim post-release episode tails")
+    trim.add_argument("--mode", choices=("release", "idle"), default="release")
     trim.add_argument("arguments", nargs=argparse.REMAINDER)
 
     depth = dataset_commands.add_parser("add-depth", help="Add Depth Anything V2 features")
@@ -95,6 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    if args.command == "predictor":
+        from .predictors.training import main as train
+
+        train(args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments)
+        return 0
     if args.command == "dataset" and args.dataset_command == "augment":
         output = augment_dataset(
             repo_id=args.repo_id,
@@ -117,11 +115,12 @@ def main(argv: list[str] | None = None) -> int:
             "tracks": "generate_track_dataset.py",
             "tracks-and-sequence": "generate_tracks_and_trajectory_dataset.py",
         }
-        return _legacy_script(scripts[args.kind], args.arguments)
+        return _generation_command(scripts[args.kind], args.arguments)
     if args.command == "dataset" and args.dataset_command == "trim":
-        return _legacy_script("trim_dataset_after_action_release.py", args.arguments)
+        module = "trim_dataset_after_action_release" if args.mode == "release" else "trim_dataset_idle_ends"
+        return _generation_command(module, args.arguments)
     if args.command == "dataset" and args.dataset_command == "add-depth":
-        return _legacy_script("add_depth_features.py", args.arguments)
+        return _generation_command("add_depth_features", args.arguments)
     if args.command == "visuals" and args.visual_command == "render":
         for path in render_artifact_visuals(args.artifact, args.frame, args.output_dir):
             LOG.info("Wrote %s", path)
